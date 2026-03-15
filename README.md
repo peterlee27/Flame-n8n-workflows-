@@ -8,6 +8,7 @@ Comprehensive n8n workflow suite for Flamecentre business automation.
 |---|---------|-------------|---------|
 | 01 | Morning Briefing | Daily briefing with schedule, emails, proposals & AI headlines | Daily @ 7am |
 | 02 | Post-Workshop Follow-Up | 3-email nurture sequence (Day 1, 7, 30) for workshop participants | Workshop end date |
+| 03 | LinkedIn Content Engine | AI-generated LinkedIn posts with approval loop & auto-publish | Webhook |
 
 ## Setup
 
@@ -51,8 +52,31 @@ The participants sheet should have these columns:
 - `status` must be `completed` for participants to enter the follow-up sequence
 - After the full 30-day sequence, the workflow automatically updates `status` to `nurtured`
 
+### Google Sheets – Content Calendar Format (Workflow 03)
+
+| date | topic | angle | targetAudience | contentType | status | publishedDate |
+|------|-------|-------|---------------|-------------|--------|--------------|
+| 2026-03-15 10:30 | AI in Leadership | Practical tips | C-suite executives | post | draft | |
+
+The workflow auto-logs entries on request and updates `status` to `published` with a timestamp after posting.
+
+### Webhook – LinkedIn Content Request (Workflow 03)
+
+Send a POST request to trigger content generation:
+
+```json
+{
+  "topic": "AI in Leadership",
+  "angle": "3 practical ways leaders can use AI today",
+  "targetAudience": "C-suite executives and founders",
+  "contentType": "post"
+}
+```
+
 ### Environment Variables
 
 | Variable | Description |
 |----------|-------------|
 | `ANTHROPIC_API_KEY` | Your Anthropic API key for Claude access |
+| `LINKEDIN_ACCESS_TOKEN` | LinkedIn OAuth2 access token for publishing |
+| `LINKEDIN_PERSON_URN` | Your LinkedIn person URN (e.g., `abc123def`) |

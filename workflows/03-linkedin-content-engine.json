@@ -1,0 +1,496 @@
+{
+  "name": "Flamecentre – LinkedIn Content Engine",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "linkedin-content",
+        "options": {
+          "responseMode": "onReceived"
+        }
+      },
+      "id": "webhook-trigger",
+      "name": "Content Request Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "webhookId": "linkedin-content"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "set-topic",
+              "name": "topic",
+              "value": "={{ $json.body.topic }}",
+              "type": "string"
+            },
+            {
+              "id": "set-angle",
+              "name": "angle",
+              "value": "={{ $json.body.angle }}",
+              "type": "string"
+            },
+            {
+              "id": "set-audience",
+              "name": "targetAudience",
+              "value": "={{ $json.body.targetAudience }}",
+              "type": "string"
+            },
+            {
+              "id": "set-type",
+              "name": "contentType",
+              "value": "={{ $json.body.contentType }}",
+              "type": "string"
+            },
+            {
+              "id": "set-feedback",
+              "name": "feedback",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "set-attempt",
+              "name": "attempt",
+              "value": "1",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-variables",
+      "name": "Set Request Variables",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "date": "={{ $now.format('yyyy-MM-dd HH:mm') }}",
+            "topic": "={{ $json.topic }}",
+            "angle": "={{ $json.angle }}",
+            "targetAudience": "={{ $json.targetAudience }}",
+            "contentType": "={{ $json.contentType }}",
+            "status": "draft"
+          }
+        },
+        "options": {}
+      },
+      "id": "log-to-calendar",
+      "name": "Log to Content Calendar",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [500, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1200, messages: [{ role: 'user', content: 'You are Wendy Tan, Managing Partner of The Flame Centre. Write a LinkedIn ' + $('Set Request Variables').first().json.contentType + ' on the following:\\n\\nTopic: ' + $('Set Request Variables').first().json.topic + '\\nAngle: ' + $('Set Request Variables').first().json.angle + '\\nTarget audience: ' + $('Set Request Variables').first().json.targetAudience + '\\n\\n' + ($('Set Request Variables').first().json.feedback ? 'IMPORTANT — This is a revision. The previous draft was not approved. Here is the feedback to incorporate:\\n' + $('Set Request Variables').first().json.feedback + '\\n\\nPlease rewrite the content addressing this feedback.\\n\\n' : '') + 'Guidelines:\\n- Tone: warm, practical, thought leadership\\n- No hashtag spam (max 3 relevant hashtags at the end if appropriate)\\n- Under 250 words\\n- Open with a hook that stops the scroll\\n- Include a personal insight or real-world example\\n- End with a question or call to reflect\\n- Write as Wendy Tan — first person, authentic voice\\n\\nReturn ONLY the post content, nothing else.' }] }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "claude-generate",
+      "name": "Generate LinkedIn Draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [750, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "extract-draft",
+              "name": "draftContent",
+              "value": "={{ $json.content[0].text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "includeOtherFields": true
+        }
+      },
+      "id": "extract-draft",
+      "name": "Extract Draft Content",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "sendTo": "wendy@flamecentre.com",
+        "subject": "=LinkedIn draft for approval — {{ $('Set Request Variables').first().json.topic }}",
+        "emailType": "html",
+        "message": "=<p>Hi Wendy,</p><p>Here's your LinkedIn {{ $('Set Request Variables').first().json.contentType }} draft on <strong>{{ $('Set Request Variables').first().json.topic }}</strong> (attempt {{ $('Set Request Variables').first().json.attempt }}):</p><hr><p>{{ $json.draftContent.replace(/\\n/g, '<br>') }}</p><hr><p><strong>To approve:</strong> Reply with the word <em>approved</em></p><p><strong>To revise:</strong> Reply with your feedback and a new draft will be generated</p>",
+        "options": {
+          "replyTo": "wendy@flamecentre.com",
+          "senderName": "Flame Centre Content Engine"
+        }
+      },
+      "id": "gmail-send-draft",
+      "name": "Send Draft for Approval",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1250, 300],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "options": {
+          "webhookSuffix": "={{ $execution.id }}"
+        }
+      },
+      "id": "wait-for-reply",
+      "name": "Wait for Approval Reply",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1500, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "check-approved",
+              "leftValue": "={{ $json.body.replyText || $json.body.reply || '' }}",
+              "rightValue": "approved",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-approved",
+      "name": "Is Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1750, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.linkedin.com/v2/ugcPosts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.LINKEDIN_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Restli-Protocol-Version",
+              "value": "2.0.0"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ author: 'urn:li:person:' + $env.LINKEDIN_PERSON_URN, lifecycleState: 'PUBLISHED', specificContent: { 'com.linkedin.ugc.ShareContent': { shareCommentary: { text: $('Extract Draft Content').first().json.draftContent }, shareMediaCategory: 'NONE' } }, visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' } }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "post-linkedin",
+      "name": "Post to LinkedIn",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2050, 200]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "sheetId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "published",
+            "publishedDate": "={{ $now.format('yyyy-MM-dd HH:mm') }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "update-published",
+      "name": "Mark as Published",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [2300, 200],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "wendy@flamecentre.com",
+        "subject": "=✅ LinkedIn post published — {{ $('Set Request Variables').first().json.topic }}",
+        "emailType": "html",
+        "message": "=<p>Hi Wendy,</p><p>Your LinkedIn {{ $('Set Request Variables').first().json.contentType }} on <strong>{{ $('Set Request Variables').first().json.topic }}</strong> has been published successfully.</p><p>— Flame Centre Content Engine</p>",
+        "options": {
+          "senderName": "Flame Centre Content Engine"
+        }
+      },
+      "id": "gmail-confirm",
+      "name": "Send Confirmation Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [2550, 200],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "set-feedback-loop",
+              "name": "feedback",
+              "value": "={{ $json.body.replyText || $json.body.reply || 'Please revise the draft.' }}",
+              "type": "string"
+            },
+            {
+              "id": "increment-attempt",
+              "name": "attempt",
+              "value": "={{ ($('Set Request Variables').first().json.attempt || 1) + 1 }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {
+          "includeOtherFields": false
+        }
+      },
+      "id": "capture-feedback",
+      "name": "Capture Feedback",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [2050, 450]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "merge-topic",
+              "name": "topic",
+              "value": "={{ $('Set Request Variables').first().json.topic }}",
+              "type": "string"
+            },
+            {
+              "id": "merge-angle",
+              "name": "angle",
+              "value": "={{ $('Set Request Variables').first().json.angle }}",
+              "type": "string"
+            },
+            {
+              "id": "merge-audience",
+              "name": "targetAudience",
+              "value": "={{ $('Set Request Variables').first().json.targetAudience }}",
+              "type": "string"
+            },
+            {
+              "id": "merge-type",
+              "name": "contentType",
+              "value": "={{ $('Set Request Variables').first().json.contentType }}",
+              "type": "string"
+            },
+            {
+              "id": "merge-feedback",
+              "name": "feedback",
+              "value": "={{ $json.feedback }}",
+              "type": "string"
+            },
+            {
+              "id": "merge-attempt",
+              "name": "attempt",
+              "value": "={{ $json.attempt }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "rebuild-context",
+      "name": "Rebuild Context for Retry",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [2300, 450]
+    }
+  ],
+  "connections": {
+    "Content Request Webhook": {
+      "main": [
+        [
+          { "node": "Set Request Variables", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Set Request Variables": {
+      "main": [
+        [
+          { "node": "Log to Content Calendar", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Log to Content Calendar": {
+      "main": [
+        [
+          { "node": "Generate LinkedIn Draft", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Generate LinkedIn Draft": {
+      "main": [
+        [
+          { "node": "Extract Draft Content", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Extract Draft Content": {
+      "main": [
+        [
+          { "node": "Send Draft for Approval", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Send Draft for Approval": {
+      "main": [
+        [
+          { "node": "Wait for Approval Reply", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Wait for Approval Reply": {
+      "main": [
+        [
+          { "node": "Is Approved?", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Is Approved?": {
+      "main": [
+        [
+          { "node": "Post to LinkedIn", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Capture Feedback", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Post to LinkedIn": {
+      "main": [
+        [
+          { "node": "Mark as Published", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Mark as Published": {
+      "main": [
+        [
+          { "node": "Send Confirmation Email", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Capture Feedback": {
+      "main": [
+        [
+          { "node": "Rebuild Context for Retry", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Rebuild Context for Retry": {
+      "main": [
+        [
+          { "node": "Generate LinkedIn Draft", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    { "name": "flamecentre" },
+    { "name": "linkedin" },
+    { "name": "content-engine" }
+  ],
+  "triggerCount": 1,
+  "pinData": {}
+}
