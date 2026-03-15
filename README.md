@@ -7,6 +7,7 @@ Comprehensive n8n workflow suite for Flamecentre business automation.
 | # | Workflow | Description | Trigger |
 |---|---------|-------------|---------|
 | 01 | Morning Briefing | Daily briefing with schedule, emails, proposals & AI headlines | Daily @ 7am |
+| 02 | Post-Workshop Follow-Up | 3-email nurture sequence (Day 1, 7, 30) for workshop participants | Workshop end date |
 
 ## Setup
 
@@ -37,6 +38,18 @@ The proposals sheet should have these columns:
 | Acme Corp | Website Redesign | 15000 | open | 2026-03-10 |
 
 The `status` column must contain `open` for rows to be picked up by the workflow.
+
+### Google Sheets – Workshop Participants Format (Workflow 02)
+
+The participants sheet should have these columns:
+
+| participantName | participantEmail | workshopName | workshopDate | workshopTopic | resourceLinks | status |
+|----------------|-----------------|--------------|-------------|--------------|---------------|--------|
+| Jane Doe | jane@example.com | Leadership Ignite | 2026-03-15 | Leadership & Team Dynamics | https://link1.com, https://link2.com | completed |
+
+- `workshopDate` should match the date the workshop ends (format: `yyyy-MM-dd`)
+- `status` must be `completed` for participants to enter the follow-up sequence
+- After the full 30-day sequence, the workflow automatically updates `status` to `nurtured`
 
 ### Environment Variables
 

@@ -1,0 +1,399 @@
+{
+  "name": "Flamecentre – Post-Workshop Follow-Up Sequence",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Workshop End Date Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "sheetId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "workshopDate",
+              "lookupValue": "={{ $now.format('yyyy-MM-dd') }}"
+            },
+            {
+              "lookupColumn": "status",
+              "lookupValue": "completed"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-participants",
+      "name": "Fetch Workshop Participants",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [250, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "split-batches",
+      "name": "Loop Per Participant",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1000, messages: [{ role: 'user', content: 'You are Wendy Tan, founder of Flame Centre. Write a warm, personal Day 1 thank-you email to a workshop participant.\\n\\nParticipant name: ' + $json.participantName + '\\nWorkshop name: ' + $json.workshopName + '\\nWorkshop topic: ' + $json.workshopTopic + '\\nResource links: ' + $json.resourceLinks + '\\n\\nThe email should:\\n- Thank them warmly for attending\\n- Reference the specific workshop name and topic naturally\\n- Include the resource links as helpful follow-up materials\\n- Encourage them to reach out with questions\\n- Sign off as Wendy Tan, Flame Centre\\n\\nTone: Warm, genuine, professional but approachable. Not salesy.\\nFormat: Plain text email body only (no subject line).' }] }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "claude-day1",
+      "name": "Generate Day 1 Thank You",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [750, 300]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Loop Per Participant').item.json.participantEmail }}",
+        "subject": "=So glad you joined us for {{ $('Loop Per Participant').item.json.workshopName }}, {{ $('Loop Per Participant').item.json.participantName }}!",
+        "emailType": "html",
+        "message": "={{ $json.content[0].text.replace(/\\n/g, '<br>') }}",
+        "options": {
+          "replyTo": "wendy@flamecentre.com",
+          "senderName": "Wendy Tan | Flame Centre"
+        }
+      },
+      "id": "gmail-day1",
+      "name": "Send Day 1 Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1000, 300],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 7,
+        "unit": "days"
+      },
+      "id": "wait-7-days",
+      "name": "Wait 7 Days",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1000, messages: [{ role: 'user', content: 'You are Wendy Tan, founder of Flame Centre. Write a Day 7 reflection email to a workshop participant.\\n\\nParticipant name: ' + $('Loop Per Participant').item.json.participantName + '\\nWorkshop name: ' + $('Loop Per Participant').item.json.workshopName + '\\nWorkshop topic: ' + $('Loop Per Participant').item.json.workshopTopic + '\\n\\nThe email should:\\n- Check in on how they are doing one week after the workshop\\n- Ask them to reflect on and share their key takeaways from the workshop\\n- Reference the specific workshop name and topic naturally\\n- Invite them to reply with their reflections or breakthroughs\\n- Keep it conversational and encouraging\\n- Sign off as Wendy Tan, Flame Centre\\n\\nTone: Warm, curious, supportive. Like a mentor checking in.\\nFormat: Plain text email body only (no subject line).' }] }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "claude-day7",
+      "name": "Generate Day 7 Reflection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1500, 300]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Loop Per Participant').item.json.participantEmail }}",
+        "subject": "=One week since {{ $('Loop Per Participant').item.json.workshopName }} — how's it going, {{ $('Loop Per Participant').item.json.participantName }}?",
+        "emailType": "html",
+        "message": "={{ $json.content[0].text.replace(/\\n/g, '<br>') }}",
+        "options": {
+          "replyTo": "wendy@flamecentre.com",
+          "senderName": "Wendy Tan | Flame Centre"
+        }
+      },
+      "id": "gmail-day7",
+      "name": "Send Day 7 Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1750, 300],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 23,
+        "unit": "days"
+      },
+      "id": "wait-23-days",
+      "name": "Wait 23 Days",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1000, messages: [{ role: 'user', content: 'You are Wendy Tan, founder of Flame Centre. Write a soft Day 30 CTA email to a workshop participant.\\n\\nParticipant name: ' + $('Loop Per Participant').item.json.participantName + '\\nWorkshop name: ' + $('Loop Per Participant').item.json.workshopName + '\\nWorkshop topic: ' + $('Loop Per Participant').item.json.workshopTopic + '\\n\\nThe email should:\\n- Acknowledge it has been a month since the workshop\\n- Celebrate their growth journey since attending\\n- Naturally introduce the idea of continuing their development\\n- Invite them to explore the next relevant Flame Centre program or workshop\\n- Include a soft call-to-action (not pushy) to visit flamecentre.com or reply for recommendations\\n- Sign off as Wendy Tan, Flame Centre\\n\\nTone: Warm, encouraging, forward-looking. Gentle nudge, not a hard sell.\\nFormat: Plain text email body only (no subject line).' }] }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "claude-day30",
+      "name": "Generate Day 30 CTA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2250, 300]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Loop Per Participant').item.json.participantEmail }}",
+        "subject": "=Your next step after {{ $('Loop Per Participant').item.json.workshopName }}, {{ $('Loop Per Participant').item.json.participantName }}",
+        "emailType": "html",
+        "message": "={{ $json.content[0].text.replace(/\\n/g, '<br>') }}",
+        "options": {
+          "replyTo": "wendy@flamecentre.com",
+          "senderName": "Wendy Tan | Flame Centre"
+        }
+      },
+      "id": "gmail-day30",
+      "name": "Send Day 30 Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [2500, 300],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "sheetId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "nurtured"
+          }
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED"
+        }
+      },
+      "id": "update-status",
+      "name": "Mark as Nurtured",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [2750, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets OAuth2"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Workshop End Date Trigger": {
+      "main": [
+        [
+          { "node": "Fetch Workshop Participants", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Fetch Workshop Participants": {
+      "main": [
+        [
+          { "node": "Loop Per Participant", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Loop Per Participant": {
+      "main": [
+        null,
+        [
+          { "node": "Generate Day 1 Thank You", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Generate Day 1 Thank You": {
+      "main": [
+        [
+          { "node": "Send Day 1 Email", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Send Day 1 Email": {
+      "main": [
+        [
+          { "node": "Wait 7 Days", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Wait 7 Days": {
+      "main": [
+        [
+          { "node": "Generate Day 7 Reflection", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Generate Day 7 Reflection": {
+      "main": [
+        [
+          { "node": "Send Day 7 Email", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Send Day 7 Email": {
+      "main": [
+        [
+          { "node": "Wait 23 Days", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Wait 23 Days": {
+      "main": [
+        [
+          { "node": "Generate Day 30 CTA", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Generate Day 30 CTA": {
+      "main": [
+        [
+          { "node": "Send Day 30 Email", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Send Day 30 Email": {
+      "main": [
+        [
+          { "node": "Mark as Nurtured", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Mark as Nurtured": {
+      "main": [
+        [
+          { "node": "Loop Per Participant", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    { "name": "flamecentre" },
+    { "name": "post-workshop" },
+    { "name": "nurture-sequence" }
+  ],
+  "triggerCount": 1,
+  "pinData": {}
+}
