@@ -1,0 +1,298 @@
+{
+  "name": "Flamecentre – Research Insight Extractor",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "set-transcript",
+              "name": "transcriptText",
+              "value": "={{ $json.transcriptText }}",
+              "type": "string"
+            },
+            {
+              "id": "set-interviewee",
+              "name": "interviewee",
+              "value": "={{ $json.interviewee }}",
+              "type": "string"
+            },
+            {
+              "id": "set-date",
+              "name": "interviewDate",
+              "value": "={{ $json.interviewDate }}",
+              "type": "string"
+            },
+            {
+              "id": "set-theme",
+              "name": "researchTheme",
+              "value": "={{ $json.researchTheme }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-vars",
+      "name": "Set Input Variables",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 3000, messages: [{ role: 'user', content: 'You are a research analyst for The Flame Centre. Extract key insights from this interview transcript.\\n\\nInterviewee: ' + $json.interviewee + '\\nInterview date: ' + $json.interviewDate + '\\nResearch theme: ' + $json.researchTheme + '\\n\\nTranscript:\\n' + $json.transcriptText + '\\n\\nInstructions:\\n- Extract key themes, memorable quotes, and practical workshop applications\\n- Look specifically for themes around: cognitive sloth, metacognitive laziness, AI dependency, and hallucination risks\\n- Also capture any other significant themes that emerge\\n\\nReturn a JSON array of insight cards. Each card must have exactly these fields:\\n- theme (string): the key theme identified\\n- quote (string): a direct or near-direct quote from the transcript\\n- workshopApplication (string): how this insight could be applied in a Flame Centre workshop\\n- interviewee (string): \"' + $json.interviewee + '\"\\n- interviewDate (string): \"' + $json.interviewDate + '\"\\n\\nReturn ONLY valid JSON — no markdown code fences, no explanation. Just the JSON array.' }] }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "claude-extract",
+      "name": "Extract Insight Cards",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "parse-cards",
+              "name": "insightCards",
+              "value": "={{ JSON.parse($json.content[0].text) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "includeOtherFields": true
+        }
+      },
+      "id": "parse-insights",
+      "name": "Parse Insight Cards",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [750, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 500, messages: [{ role: 'user', content: 'You are a research analyst for The Flame Centre. Write a concise 150-word digest summarising the top 3 insights from an interview transcript for Wendy Tan.\\n\\nInterviewee: ' + $('Set Input Variables').first().json.interviewee + '\\nInterview date: ' + $('Set Input Variables').first().json.interviewDate + '\\nResearch theme: ' + $('Set Input Variables').first().json.researchTheme + '\\n\\nExtracted insights:\\n' + JSON.stringify($json.insightCards) + '\\n\\nGuidelines:\\n- Plain English, no jargon\\n- Lead with the most impactful insight\\n- Each insight should be 1-2 sentences with the key takeaway\\n- End with a one-line recommendation for how to use these insights\\n- Keep it to exactly 150 words\\n\\nFormat: Plain text only.' }] }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "claude-digest",
+      "name": "Generate 150-Word Digest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "extract-digest",
+              "name": "digestText",
+              "value": "={{ $json.content[0].text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "includeOtherFields": true
+        }
+      },
+      "id": "extract-digest",
+      "name": "Extract Digest Text",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "={{ $('Parse Insight Cards').first().json.insightCards }}",
+        "options": {}
+      },
+      "id": "split-cards",
+      "name": "Split Insight Cards",
+      "type": "n8n-nodes-base.itemLists",
+      "typeVersion": 3.1,
+      "position": [1500, 200]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "theme": "={{ $json.theme }}",
+            "quote": "={{ $json.quote }}",
+            "workshopApplication": "={{ $json.workshopApplication }}",
+            "interviewee": "={{ $json.interviewee }}",
+            "interviewDate": "={{ $json.interviewDate }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "append-insights",
+      "name": "Append to Master Insights Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1750, 200],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "wendy@flamecentre.com",
+        "subject": "=New insights from {{ $('Set Input Variables').first().json.interviewee }} — {{ $('Set Input Variables').first().json.interviewDate }}",
+        "emailType": "html",
+        "message": "=<p>Hi Wendy,</p><p>Here's the digest from the latest interview:</p><hr><p>{{ $('Extract Digest Text').first().json.digestText.replace(/\\n/g, '<br>') }}</p><hr><p><strong>{{ $('Parse Insight Cards').first().json.insightCards.length }} insight cards</strong> have been added to the master insights sheet.</p><p>— Flame Centre Research Engine</p>",
+        "options": {
+          "senderName": "Flame Centre Research Engine"
+        }
+      },
+      "id": "gmail-digest",
+      "name": "Send Digest Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1500, 450],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail OAuth2"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          { "node": "Set Input Variables", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Set Input Variables": {
+      "main": [
+        [
+          { "node": "Extract Insight Cards", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Extract Insight Cards": {
+      "main": [
+        [
+          { "node": "Parse Insight Cards", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Parse Insight Cards": {
+      "main": [
+        [
+          { "node": "Generate 150-Word Digest", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Generate 150-Word Digest": {
+      "main": [
+        [
+          { "node": "Extract Digest Text", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Extract Digest Text": {
+      "main": [
+        [
+          { "node": "Split Insight Cards", "type": "main", "index": 0 },
+          { "node": "Send Digest Email", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Split Insight Cards": {
+      "main": [
+        [
+          { "node": "Append to Master Insights Sheet", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    { "name": "flamecentre" },
+    { "name": "research" },
+    { "name": "insight-extraction" }
+  ],
+  "triggerCount": 0,
+  "pinData": {}
+}

@@ -1,0 +1,492 @@
+{
+  "name": "Flamecentre – Book Download Nurture Sequence",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "book-download",
+        "options": {
+          "responseMode": "onReceived"
+        }
+      },
+      "id": "webhook-trigger",
+      "name": "Book Download Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "webhookId": "book-download"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "set-name",
+              "name": "name",
+              "value": "={{ $json.body.name }}",
+              "type": "string"
+            },
+            {
+              "id": "set-email",
+              "name": "email",
+              "value": "={{ $json.body.email }}",
+              "type": "string"
+            },
+            {
+              "id": "set-sector",
+              "name": "sector",
+              "value": "={{ $json.body.sector }}",
+              "type": "string"
+            },
+            {
+              "id": "set-source",
+              "name": "downloadSource",
+              "value": "={{ $json.body.downloadSource }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-vars",
+      "name": "Set Lead Variables",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "name": "={{ $json.name }}",
+            "email": "={{ $json.email }}",
+            "sector": "={{ $json.sector }}",
+            "downloadSource": "={{ $json.downloadSource }}",
+            "status": "new",
+            "downloadDate": "={{ $now.format('yyyy-MM-dd HH:mm') }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "log-lead",
+      "name": "Log Lead to Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [500, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 800, messages: [{ role: 'user', content: 'You are Wendy Tan, Managing Partner of The Flame Centre. Write a warm welcome email to someone who just downloaded your book \"Smarter: 5 Steps to Human-AI Collaboration\".\\n\\nRecipient name: ' + $('Set Lead Variables').first().json.name + '\\nDownload source: ' + $('Set Lead Variables').first().json.downloadSource + '\\n\\nThe email should:\\n- Thank them warmly for downloading Smarter\\n- Share a brief personal note about why you wrote the book\\n- Mention one key idea from the book to spark curiosity\\n- Encourage them to reach out with questions or reflections\\n- Sign off as Wendy Tan, Managing Partner, The Flame Centre\\n\\nTone: Warm, personal, genuine. Like a note from the author.\\nFormat: Plain text email body only (no subject line).' }] }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "claude-welcome",
+      "name": "Generate Welcome Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [750, 300]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Set Lead Variables').first().json.email }}",
+        "subject": "=Thanks for downloading Smarter, {{ $('Set Lead Variables').first().json.name }}!",
+        "emailType": "html",
+        "message": "={{ $json.content[0].text.replace(/\\n/g, '<br>') }}",
+        "options": {
+          "replyTo": "wendy@flamecentre.com",
+          "senderName": "Wendy Tan | The Flame Centre"
+        }
+      },
+      "id": "gmail-welcome",
+      "name": "Send Welcome Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1000, 300],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 3,
+        "unit": "days"
+      },
+      "id": "wait-3-days",
+      "name": "Wait 3 Days",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "check-sector",
+              "leftValue": "={{ $('Set Lead Variables').first().json.sector }}",
+              "rightValue": "public",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-sector-email2",
+      "name": "Check Sector for Email 2",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1500, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 800, messages: [{ role: 'user', content: 'You are Wendy Tan, Managing Partner of The Flame Centre. Write Email 2 in a nurture sequence to a public sector professional who downloaded your book \"Smarter: 5 Steps to Human-AI Collaboration\" three days ago.\\n\\nRecipient name: ' + $('Set Lead Variables').first().json.name + '\\n\\nThe email should:\\n- Share one key insight from Smarter that is particularly relevant to public servants (e.g., how AI can enhance policy analysis, citizen services, or decision-making in government)\\n- Connect the insight to real challenges public sector leaders face\\n- Include a soft invite to the \"Thinking with AI\" workshop as a natural next step\\n- Not be pushy — frame the workshop as a resource, not a sales pitch\\n- Sign off as Wendy Tan, The Flame Centre\\n\\nTone: Thoughtful, helpful, collegial.\\nFormat: Plain text email body only (no subject line).' }] }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "claude-email2-public",
+      "name": "Generate Email 2 – Public",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1800, 150]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 800, messages: [{ role: 'user', content: 'You are Wendy Tan, Managing Partner of The Flame Centre. Write Email 2 in a nurture sequence to a private sector / financial services professional who downloaded your book \"Smarter: 5 Steps to Human-AI Collaboration\" three days ago.\\n\\nRecipient name: ' + $('Set Lead Variables').first().json.name + '\\n\\nThe email should:\\n- Share one key insight from Smarter that is particularly relevant to financial services professionals (e.g., how AI changes risk assessment, client advisory, or leadership in fast-moving markets)\\n- Connect the insight to real challenges private sector leaders face\\n- Include a soft invite to the \"Learning Agility\" workshop as a natural next step\\n- Not be pushy — frame the workshop as a resource, not a sales pitch\\n- Sign off as Wendy Tan, The Flame Centre\\n\\nTone: Conversational, insightful, peer-to-peer.\\nFormat: Plain text email body only (no subject line).' }] }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "claude-email2-private",
+      "name": "Generate Email 2 – Private",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1800, 450]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Set Lead Variables').first().json.email }}",
+        "subject": "=A key idea from Smarter I thought you'd find useful, {{ $('Set Lead Variables').first().json.name }}",
+        "emailType": "html",
+        "message": "={{ $json.content[0].text.replace(/\\n/g, '<br>') }}",
+        "options": {
+          "replyTo": "wendy@flamecentre.com",
+          "senderName": "Wendy Tan | The Flame Centre"
+        }
+      },
+      "id": "gmail-email2",
+      "name": "Send Email 2",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [2100, 300],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 4,
+        "unit": "days"
+      },
+      "id": "wait-4-days",
+      "name": "Wait 4 Days",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [2350, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 800, messages: [{ role: 'user', content: 'You are Wendy Tan, Managing Partner of The Flame Centre. Write Email 3 — the final email in a nurture sequence for someone who downloaded your book \"Smarter: 5 Steps to Human-AI Collaboration\" about a week ago.\\n\\nRecipient name: ' + $('Set Lead Variables').first().json.name + '\\nSector: ' + $('Set Lead Variables').first().json.sector + '\\n\\nThe email should:\\n- Acknowledge this is the final email in the series — no pressure\\n- Invite them to an upcoming keynote or workshop (keep it general, not a specific date)\\n- Include a clear CTA link: https://www.flamecentre.com/programs\\n- Frame it as an opportunity to go deeper on the ideas in Smarter\\n- Leave the door open for future connection\\n- Sign off as Wendy Tan, The Flame Centre\\n\\nTone: Warm, encouraging, respectful of their time. Clean close.\\nFormat: Plain text email body only (no subject line).' }] }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "claude-email3",
+      "name": "Generate Email 3 – Final Nudge",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2600, 300]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Set Lead Variables').first().json.email }}",
+        "subject": "=One last thing, {{ $('Set Lead Variables').first().json.name }} — an invite from Flame Centre",
+        "emailType": "html",
+        "message": "={{ $json.content[0].text.replace(/\\n/g, '<br>') }}",
+        "options": {
+          "replyTo": "wendy@flamecentre.com",
+          "senderName": "Wendy Tan | The Flame Centre"
+        }
+      },
+      "id": "gmail-email3",
+      "name": "Send Email 3",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [2850, 300],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "sheetId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "nurtured",
+            "nurturedDate": "={{ $now.format('yyyy-MM-dd HH:mm') }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "update-nurtured",
+      "name": "Mark as Nurtured",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [3100, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets OAuth2"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Book Download Webhook": {
+      "main": [
+        [
+          { "node": "Set Lead Variables", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Set Lead Variables": {
+      "main": [
+        [
+          { "node": "Log Lead to Sheet", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Log Lead to Sheet": {
+      "main": [
+        [
+          { "node": "Generate Welcome Email", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Generate Welcome Email": {
+      "main": [
+        [
+          { "node": "Send Welcome Email", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Send Welcome Email": {
+      "main": [
+        [
+          { "node": "Wait 3 Days", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Wait 3 Days": {
+      "main": [
+        [
+          { "node": "Check Sector for Email 2", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Check Sector for Email 2": {
+      "main": [
+        [
+          { "node": "Generate Email 2 – Public", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Generate Email 2 – Private", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Generate Email 2 – Public": {
+      "main": [
+        [
+          { "node": "Send Email 2", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Generate Email 2 – Private": {
+      "main": [
+        [
+          { "node": "Send Email 2", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Send Email 2": {
+      "main": [
+        [
+          { "node": "Wait 4 Days", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Wait 4 Days": {
+      "main": [
+        [
+          { "node": "Generate Email 3 – Final Nudge", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Generate Email 3 – Final Nudge": {
+      "main": [
+        [
+          { "node": "Send Email 3", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Send Email 3": {
+      "main": [
+        [
+          { "node": "Mark as Nurtured", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    { "name": "flamecentre" },
+    { "name": "book-download" },
+    { "name": "nurture-sequence" }
+  ],
+  "triggerCount": 1,
+  "pinData": {}
+}

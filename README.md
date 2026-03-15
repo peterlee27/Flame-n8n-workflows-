@@ -9,6 +9,9 @@ Comprehensive n8n workflow suite for Flamecentre business automation.
 | 01 | Morning Briefing | Daily briefing with schedule, emails, proposals & AI headlines | Daily @ 7am |
 | 02 | Post-Workshop Follow-Up | 3-email nurture sequence (Day 1, 7, 30) for workshop participants | Workshop end date |
 | 03 | LinkedIn Content Engine | AI-generated LinkedIn posts with approval loop & auto-publish | Webhook |
+| 04 | Lead Routing & Outreach | Sector-based outreach (public/private) with auto follow-up | Webhook |
+| 05 | Book Download Nurture | 3-email sequence for Smarter book downloads, sector-tailored | Webhook |
+| 06 | Research Insight Extractor | Extract insight cards & digest from interview transcripts | Manual |
 
 ## Setup
 
@@ -72,6 +75,43 @@ Send a POST request to trigger content generation:
   "contentType": "post"
 }
 ```
+
+### Webhook – New Lead (Workflow 04)
+
+```json
+{
+  "leadName": "John Smith",
+  "organisation": "Ministry of Education",
+  "sector": "public",
+  "leadEmail": "john@moe.gov.sg"
+}
+```
+
+### Webhook – Book Download (Workflow 05)
+
+```json
+{
+  "name": "Sarah Lee",
+  "email": "sarah@company.com",
+  "sector": "private",
+  "downloadSource": "LinkedIn ad"
+}
+```
+
+### Google Sheets – Lead Tracking Format (Workflows 04 & 05)
+
+| leadName/name | organisation | sector | leadEmail/email | status | createdDate |
+|--------------|-------------|--------|----------------|--------|-------------|
+| John Smith | Ministry of Education | public | john@moe.gov.sg | new | 2026-03-15 |
+
+Status progression: `new` → `contacted` → `followed up` or `engaged`  (Workflow 04)
+Status progression: `new` → `nurtured` (Workflow 05)
+
+### Google Sheets – Master Insights Format (Workflow 06)
+
+| theme | quote | workshopApplication | interviewee | interviewDate |
+|-------|-------|-------------------|-------------|--------------|
+| Cognitive Sloth | "People default to AI answers..." | Use as opening exercise in Thinking with AI workshop | Dr. Jane Doe | 2026-03-10 |
 
 ### Environment Variables
 

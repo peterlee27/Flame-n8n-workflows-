@@ -1,0 +1,544 @@
+{
+  "name": "Flamecentre – Lead Routing & Outreach",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "new-lead",
+        "options": {
+          "responseMode": "onReceived"
+        }
+      },
+      "id": "webhook-trigger",
+      "name": "New Lead Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "webhookId": "new-lead"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "set-name",
+              "name": "leadName",
+              "value": "={{ $json.body.leadName }}",
+              "type": "string"
+            },
+            {
+              "id": "set-org",
+              "name": "organisation",
+              "value": "={{ $json.body.organisation }}",
+              "type": "string"
+            },
+            {
+              "id": "set-sector",
+              "name": "sector",
+              "value": "={{ $json.body.sector }}",
+              "type": "string"
+            },
+            {
+              "id": "set-email",
+              "name": "leadEmail",
+              "value": "={{ $json.body.leadEmail }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-lead-vars",
+      "name": "Set Lead Variables",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "leadName": "={{ $json.leadName }}",
+            "organisation": "={{ $json.organisation }}",
+            "sector": "={{ $json.sector }}",
+            "leadEmail": "={{ $json.leadEmail }}",
+            "status": "new",
+            "createdDate": "={{ $now.format('yyyy-MM-dd HH:mm') }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "log-lead",
+      "name": "Log Lead to Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [500, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "check-sector",
+              "leftValue": "={{ $('Set Lead Variables').first().json.sector }}",
+              "rightValue": "public",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-sector",
+      "name": "Check Sector",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [750, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1000, messages: [{ role: 'user', content: 'You are Wendy Tan, Managing Partner of The Flame Centre. Write a formal outreach email to a new public sector lead.\\n\\nLead name: ' + $('Set Lead Variables').first().json.leadName + '\\nOrganisation: ' + $('Set Lead Variables').first().json.organisation + '\\n\\nThe email should:\\n- Be professional and respectful of public sector protocols\\n- Reference Flame Centre\\'s established work with CSC (Civil Service College) and GovTech\\n- Highlight how Flame Centre helps public sector leaders navigate AI adoption and leadership development\\n- Mention relevant programs like Thinking with AI workshops\\n- Include a soft call-to-action to explore a conversation\\n- Sign off as Wendy Tan, Managing Partner, The Flame Centre\\n\\nTone: Formal, credible, warm but professional.\\nFormat: Plain text email body only (no subject line).' }] }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "claude-public",
+      "name": "Generate Public Sector Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1050, 150]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1000, messages: [{ role: 'user', content: 'You are Wendy Tan, Managing Partner of The Flame Centre. Write a conversational outreach email to a new private sector lead.\\n\\nLead name: ' + $('Set Lead Variables').first().json.leadName + '\\nOrganisation: ' + $('Set Lead Variables').first().json.organisation + '\\n\\nThe email should:\\n- Be conversational, warm, and approachable\\n- Reference Flame Centre\\'s work in financial services and leadership development\\n- Highlight how Flame Centre helps private sector leaders build learning agility and navigate AI transformation\\n- Mention relevant programs like the Learning Agility workshop\\n- Include a soft call-to-action to connect over coffee or a call\\n- Sign off as Wendy Tan, Managing Partner, The Flame Centre\\n\\nTone: Conversational, warm, peer-to-peer. Not salesy.\\nFormat: Plain text email body only (no subject line).' }] }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "claude-private",
+      "name": "Generate Private Sector Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1050, 450]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Set Lead Variables').first().json.leadEmail }}",
+        "subject": "=Connecting from The Flame Centre — {{ $('Set Lead Variables').first().json.leadName }}",
+        "emailType": "html",
+        "message": "={{ $json.content[0].text.replace(/\\n/g, '<br>') }}",
+        "options": {
+          "replyTo": "wendy@flamecentre.com",
+          "senderName": "Wendy Tan | The Flame Centre"
+        }
+      },
+      "id": "gmail-send-outreach",
+      "name": "Send Outreach Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1350, 300],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "sheetId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "contacted",
+            "contactedDate": "={{ $now.format('yyyy-MM-dd HH:mm') }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "update-contacted",
+      "name": "Mark as Contacted",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1600, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 5,
+        "unit": "days"
+      },
+      "id": "wait-5-days",
+      "name": "Wait 5 Days",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1850, 300]
+    },
+    {
+      "parameters": {
+        "filters": {
+          "q": "=to:{{ $('Set Lead Variables').first().json.leadEmail }}",
+          "readStatus": "ALL",
+          "receivedAfter": "={{ $now.minus({ days: 5 }).toISO() }}"
+        },
+        "options": {
+          "maxResults": 5
+        }
+      },
+      "id": "gmail-check-reply",
+      "name": "Check for Reply",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [2100, 300],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "check-reply",
+              "leftValue": "={{ $json.length || 0 }}",
+              "rightValue": "0",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-reply",
+      "name": "Reply Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2350, 300]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "sheetId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "engaged",
+            "engagedDate": "={{ $now.format('yyyy-MM-dd HH:mm') }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "update-engaged",
+      "name": "Mark as Engaged",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [2650, 150],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 600, messages: [{ role: 'user', content: 'You are Wendy Tan, Managing Partner of The Flame Centre. Write a short, polite follow-up email to a lead who hasn\\'t replied to your initial outreach.\\n\\nLead name: ' + $('Set Lead Variables').first().json.leadName + '\\nOrganisation: ' + $('Set Lead Variables').first().json.organisation + '\\nSector: ' + $('Set Lead Variables').first().json.sector + '\\n\\nThe email should:\\n- Be brief (under 100 words)\\n- Reference the previous email naturally\\n- Offer one specific value proposition relevant to their sector\\n- Make it easy to reply (yes/no question or simple CTA)\\n- Not be pushy or guilt-trippy\\n- Sign off as Wendy Tan, The Flame Centre\\n\\nFormat: Plain text email body only (no subject line).' }] }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "claude-followup",
+      "name": "Generate Follow-Up Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2650, 450]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Set Lead Variables').first().json.leadEmail }}",
+        "subject": "=Quick follow-up — {{ $('Set Lead Variables').first().json.leadName }}",
+        "emailType": "html",
+        "message": "={{ $json.content[0].text.replace(/\\n/g, '<br>') }}",
+        "options": {
+          "replyTo": "wendy@flamecentre.com",
+          "senderName": "Wendy Tan | The Flame Centre"
+        }
+      },
+      "id": "gmail-followup",
+      "name": "Send Follow-Up Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [2900, 450],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "sheetId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "followed up",
+            "followUpDate": "={{ $now.format('yyyy-MM-dd HH:mm') }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "update-followed-up",
+      "name": "Mark as Followed Up",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [3150, 450],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets OAuth2"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "New Lead Webhook": {
+      "main": [
+        [
+          { "node": "Set Lead Variables", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Set Lead Variables": {
+      "main": [
+        [
+          { "node": "Log Lead to Sheet", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Log Lead to Sheet": {
+      "main": [
+        [
+          { "node": "Check Sector", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Check Sector": {
+      "main": [
+        [
+          { "node": "Generate Public Sector Email", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Generate Private Sector Email", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Generate Public Sector Email": {
+      "main": [
+        [
+          { "node": "Send Outreach Email", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Generate Private Sector Email": {
+      "main": [
+        [
+          { "node": "Send Outreach Email", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Send Outreach Email": {
+      "main": [
+        [
+          { "node": "Mark as Contacted", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Mark as Contacted": {
+      "main": [
+        [
+          { "node": "Wait 5 Days", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Wait 5 Days": {
+      "main": [
+        [
+          { "node": "Check for Reply", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Check for Reply": {
+      "main": [
+        [
+          { "node": "Reply Exists?", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Reply Exists?": {
+      "main": [
+        [
+          { "node": "Mark as Engaged", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Generate Follow-Up Email", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Generate Follow-Up Email": {
+      "main": [
+        [
+          { "node": "Send Follow-Up Email", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Send Follow-Up Email": {
+      "main": [
+        [
+          { "node": "Mark as Followed Up", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    { "name": "flamecentre" },
+    { "name": "lead-routing" },
+    { "name": "outreach" }
+  ],
+  "triggerCount": 1,
+  "pinData": {}
+}
