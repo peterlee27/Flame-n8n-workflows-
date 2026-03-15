@@ -1,0 +1,265 @@
+{
+  "name": "Flamecentre – Morning Briefing",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 7
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily 7am Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "options": {
+          "timeMin": "={{ $now.startOf('day').toISO() }}",
+          "timeMax": "={{ $now.endOf('day').toISO() }}"
+        }
+      },
+      "id": "google-calendar",
+      "name": "Fetch Today's Events",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [300, 100],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "",
+          "name": "Google Calendar OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "filters": {
+          "readStatus": "UNREAD",
+          "receivedAfter": "={{ $now.startOf('day').toISO() }}"
+        },
+        "options": {
+          "maxResults": 20
+        }
+      },
+      "id": "gmail-fetch",
+      "name": "Fetch Unread Emails",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [300, 300],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "sheetId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "status",
+              "lookupValue": "open"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "google-sheets",
+      "name": "Fetch Open Proposals",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [300, 500],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "append",
+        "options": {}
+      },
+      "id": "merge-node",
+      "name": "Merge All Data",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "prep-meetings",
+              "name": "todaysMeetings",
+              "value": "={{ $('Fetch Today\\'s Events').all().map(e => e.json.summary + ' at ' + e.json.start?.dateTime).join('\\n') }}",
+              "type": "string"
+            },
+            {
+              "id": "prep-emails",
+              "name": "urgentEmails",
+              "value": "={{ $('Fetch Unread Emails').all().map(e => 'From: ' + e.json.from + ' | Subject: ' + e.json.subject).join('\\n') }}",
+              "type": "string"
+            },
+            {
+              "id": "prep-proposals",
+              "name": "openProposals",
+              "value": "={{ $('Fetch Open Proposals').all().map(e => e.json.client + ' – ' + e.json.proposal_name + ' ($' + e.json.amount + ')').join('\\n') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "prepare-data",
+      "name": "Prepare Briefing Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [800, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1500, messages: [{ role: 'user', content: 'You are Wendy\\'s executive assistant at Flamecentre. Generate a polished morning briefing email for today (' + $now.format('EEEE, MMMM d, yyyy') + '). Use exactly these four sections with clear formatting:\\n\\n## 📅 Today\\'s Schedule\\n' + $json.todaysMeetings + '\\n\\n## 🚨 Urgent Emails\\n' + $json.urgentEmails + '\\n\\n## 📝 Open Proposals\\n' + $json.openProposals + '\\n\\n## 📰 AI Headlines\\nInclude 3-4 relevant AI/tech headlines that may impact Flamecentre\\'s business.\\n\\nKeep it concise, professional, and actionable. Highlight anything that needs immediate attention.' }] }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "anthropic-api",
+      "name": "Generate Briefing via Claude",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "sendTo": "wendy@flamecentre.com",
+        "subject": "=☀️ Flamecentre Morning Briefing – {{ $now.format('EEEE, MMMM d') }}",
+        "emailType": "html",
+        "message": "={{ $json.content[0].text.replace(/\\n/g, '<br>').replace(/## /g, '<h2>').replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>') }}",
+        "options": {}
+      },
+      "id": "gmail-send",
+      "name": "Send Briefing Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1300, 300],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail OAuth2"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily 7am Trigger": {
+      "main": [
+        [
+          { "node": "Fetch Today's Events", "type": "main", "index": 0 },
+          { "node": "Fetch Unread Emails", "type": "main", "index": 0 },
+          { "node": "Fetch Open Proposals", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Fetch Today's Events": {
+      "main": [
+        [
+          { "node": "Merge All Data", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Fetch Unread Emails": {
+      "main": [
+        [
+          { "node": "Merge All Data", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Fetch Open Proposals": {
+      "main": [
+        [
+          { "node": "Merge All Data", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Merge All Data": {
+      "main": [
+        [
+          { "node": "Prepare Briefing Data", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Prepare Briefing Data": {
+      "main": [
+        [
+          { "node": "Generate Briefing via Claude", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Generate Briefing via Claude": {
+      "main": [
+        [
+          { "node": "Send Briefing Email", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    { "name": "flamecentre" },
+    { "name": "morning-briefing" },
+    { "name": "daily" }
+  ],
+  "triggerCount": 1,
+  "pinData": {}
+}
