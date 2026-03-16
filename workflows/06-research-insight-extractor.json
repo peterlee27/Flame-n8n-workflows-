@@ -90,12 +90,28 @@
               "name": "insightCards",
               "value": "={{ JSON.parse($json.content[0].text) }}",
               "type": "string"
+            },
+            {
+              "id": "carry-interviewee",
+              "name": "interviewee",
+              "value": "={{ $('Set Input Variables').first().json.interviewee }}",
+              "type": "string"
+            },
+            {
+              "id": "carry-date",
+              "name": "interviewDate",
+              "value": "={{ $('Set Input Variables').first().json.interviewDate }}",
+              "type": "string"
+            },
+            {
+              "id": "carry-theme",
+              "name": "researchTheme",
+              "value": "={{ $('Set Input Variables').first().json.researchTheme }}",
+              "type": "string"
             }
           ]
         },
-        "options": {
-          "includeOtherFields": true
-        }
+        "options": {}
       },
       "id": "parse-insights",
       "name": "Parse Insight Cards",
@@ -126,7 +142,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 500, messages: [{ role: 'user', content: 'You are a research analyst for The Flame Centre. Write a concise 150-word digest summarising the top 3 insights from an interview transcript for Wendy Tan.\\n\\nInterviewee: ' + $('Set Input Variables').first().json.interviewee + '\\nInterview date: ' + $('Set Input Variables').first().json.interviewDate + '\\nResearch theme: ' + $('Set Input Variables').first().json.researchTheme + '\\n\\nExtracted insights:\\n' + JSON.stringify($json.insightCards) + '\\n\\nGuidelines:\\n- Plain English, no jargon\\n- Lead with the most impactful insight\\n- Each insight should be 1-2 sentences with the key takeaway\\n- End with a one-line recommendation for how to use these insights\\n- Keep it to exactly 150 words\\n\\nFormat: Plain text only.' }] }) }}",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 500, messages: [{ role: 'user', content: 'You are a research analyst for The Flame Centre. Write a concise 150-word digest summarising the top 3 insights from an interview transcript for Wendy Tan.\\n\\nInterviewee: ' + $json.interviewee + '\\nInterview date: ' + $json.interviewDate + '\\nResearch theme: ' + $json.researchTheme + '\\n\\nExtracted insights:\\n' + JSON.stringify($json.insightCards) + '\\n\\nGuidelines:\\n- Plain English, no jargon\\n- Lead with the most impactful insight\\n- Each insight should be 1-2 sentences with the key takeaway\\n- End with a one-line recommendation for how to use these insights\\n- Keep it to exactly 150 words\\n\\nFormat: Plain text only.' }] }) }}",
         "options": {
           "timeout": 30000
         }
@@ -146,22 +162,38 @@
               "name": "digestText",
               "value": "={{ $json.content[0].text }}",
               "type": "string"
+            },
+            {
+              "id": "carry-cards",
+              "name": "insightCards",
+              "value": "={{ $('Parse Insight Cards').first().json.insightCards }}",
+              "type": "string"
+            },
+            {
+              "id": "carry-interviewee2",
+              "name": "interviewee",
+              "value": "={{ $('Parse Insight Cards').first().json.interviewee }}",
+              "type": "string"
+            },
+            {
+              "id": "carry-date2",
+              "name": "interviewDate",
+              "value": "={{ $('Parse Insight Cards').first().json.interviewDate }}",
+              "type": "string"
             }
           ]
         },
-        "options": {
-          "includeOtherFields": true
-        }
+        "options": {}
       },
       "id": "extract-digest",
-      "name": "Extract Digest Text",
+      "name": "Merge Digest + Context",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [1250, 300]
     },
     {
       "parameters": {
-        "fieldToSplitOut": "={{ $('Parse Insight Cards').first().json.insightCards }}",
+        "fieldToSplitOut": "insightCards",
         "options": {}
       },
       "id": "split-cards",
@@ -210,9 +242,9 @@
     {
       "parameters": {
         "sendTo": "wendy@flamecentre.com",
-        "subject": "=New insights from {{ $('Set Input Variables').first().json.interviewee }} — {{ $('Set Input Variables').first().json.interviewDate }}",
+        "subject": "=New insights from {{ $json.interviewee }} — {{ $json.interviewDate }}",
         "emailType": "html",
-        "message": "=<p>Hi Wendy,</p><p>Here's the digest from the latest interview:</p><hr><p>{{ $('Extract Digest Text').first().json.digestText.replace(/\\n/g, '<br>') }}</p><hr><p><strong>{{ $('Parse Insight Cards').first().json.insightCards.length }} insight cards</strong> have been added to the master insights sheet.</p><p>— Flame Centre Research Engine</p>",
+        "message": "=<p>Hi Wendy,</p><p>Here's the digest from the latest interview:</p><hr><p>{{ $json.digestText.replace(/\\n/g, '<br>') }}</p><hr><p><strong>{{ $json.insightCards.length }} insight cards</strong> have been added to the master insights sheet.</p><p>— Flame Centre Research Engine</p>",
         "options": {
           "senderName": "Flame Centre Research Engine"
         }
@@ -262,11 +294,11 @@
     "Generate 150-Word Digest": {
       "main": [
         [
-          { "node": "Extract Digest Text", "type": "main", "index": 0 }
+          { "node": "Merge Digest + Context", "type": "main", "index": 0 }
         ]
       ]
     },
-    "Extract Digest Text": {
+    "Merge Digest + Context": {
       "main": [
         [
           { "node": "Split Insight Cards", "type": "main", "index": 0 },
