@@ -1,0 +1,247 @@
+{
+  "name": "Flamecentre – Morning Briefing (Backend Test)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  {\n    json: {\n      summary: 'Team standup',\n      start: { dateTime: '2026-03-16T09:00:00+08:00' },\n      end: { dateTime: '2026-03-16T09:30:00+08:00' }\n    }\n  },\n  {\n    json: {\n      summary: 'Client call – Acme Corp proposal review',\n      start: { dateTime: '2026-03-16T11:00:00+08:00' },\n      end: { dateTime: '2026-03-16T12:00:00+08:00' }\n    }\n  },\n  {\n    json: {\n      summary: 'AI workshop prep session',\n      start: { dateTime: '2026-03-16T14:00:00+08:00' },\n      end: { dateTime: '2026-03-16T15:30:00+08:00' }\n    }\n  }\n];"
+      },
+      "id": "mock-calendar",
+      "name": "Mock Calendar Events",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [300, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  {\n    json: {\n      from: 'sarah@acmecorp.com',\n      subject: 'RE: Proposal revisions – need sign-off by EOD',\n      snippet: 'Hi Wendy, please review the updated scope and confirm.'\n    }\n  },\n  {\n    json: {\n      from: 'james@ministry.gov.sg',\n      subject: 'Workshop logistics confirmation',\n      snippet: 'Confirming venue and AV setup for next week.'\n    }\n  },\n  {\n    json: {\n      from: 'newsletter@techcrunch.com',\n      subject: 'AI Weekly Digest',\n      snippet: 'Top stories in AI this week...'\n    }\n  },\n  {\n    json: {\n      from: 'peter@flamecentre.com',\n      subject: 'Q2 content calendar draft',\n      snippet: 'Attached the draft calendar for your review.'\n    }\n  }\n];"
+      },
+      "id": "mock-emails",
+      "name": "Mock Unread Emails",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [300, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  {\n    json: {\n      client: 'Acme Corp',\n      proposal_name: 'Website Redesign',\n      amount: 15000,\n      status: 'open',\n      date: '2026-03-10'\n    }\n  },\n  {\n    json: {\n      client: 'Ministry of Education',\n      proposal_name: 'Leadership Workshop Series',\n      amount: 28000,\n      status: 'open',\n      date: '2026-03-12'\n    }\n  },\n  {\n    json: {\n      client: 'StartupXYZ',\n      proposal_name: 'AI Strategy Consultation',\n      amount: 8500,\n      status: 'open',\n      date: '2026-03-14'\n    }\n  }\n];"
+      },
+      "id": "mock-proposals",
+      "name": "Mock Open Proposals",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [300, 500]
+    },
+    {
+      "parameters": {
+        "mode": "append",
+        "numberInputs": 3,
+        "options": {}
+      },
+      "id": "merge-node",
+      "name": "Merge All Data",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "prep-meetings",
+              "name": "todaysMeetings",
+              "value": "={{ $('Mock Calendar Events').all().map(e => (e.json.summary || '(No title)') + ' at ' + (e.json.start?.dateTime || 'TBD')).join('\\n') }}",
+              "type": "string"
+            },
+            {
+              "id": "prep-emails",
+              "name": "urgentEmails",
+              "value": "={{ $('Mock Unread Emails').all().map(e => 'From: ' + (e.json.from || 'Unknown') + ' | Subject: ' + (e.json.subject || '(No subject)')).join('\\n') }}",
+              "type": "string"
+            },
+            {
+              "id": "prep-proposals",
+              "name": "openProposals",
+              "value": "={{ $('Mock Open Proposals').all().map(e => (e.json.client || 'Unknown') + ' – ' + (e.json.proposal_name || '(Untitled)') + ' ($' + (e.json.amount || '0') + ')').join('\\n') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "prepare-data",
+      "name": "Prepare Briefing Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [800, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1500, messages: [{ role: 'user', content: 'You are an executive assistant at Flamecentre. Generate a concise morning briefing for today (' + $now.format('EEEE, MMMM d, yyyy') + '). Write one informative paragraph summarising the day, then provide bullet points for the main tasks. Use these sections:\\n\\nToday\\'s Schedule:\\n' + $json.todaysMeetings + '\\n\\nUnread Emails:\\n' + $json.urgentEmails + '\\n\\nOpen Proposals:\\n' + $json.openProposals + '\\n\\nFormat: Start with a brief overview paragraph, then bullet points for key tasks. Keep it actionable and professional.' }] }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "anthropic-api",
+      "name": "Generate Briefing via Claude",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "extract-briefing",
+              "name": "briefingText",
+              "value": "={{ $json.content[0].text }}",
+              "type": "string"
+            },
+            {
+              "id": "extract-subject",
+              "name": "emailSubject",
+              "value": "=Flamecentre Morning Briefing – {{ $now.format('EEEE, MMMM d') }}",
+              "type": "string"
+            },
+            {
+              "id": "extract-html",
+              "name": "briefingHtml",
+              "value": "={{ $json.content[0].text.replace(/\\n/g, '<br>').replace(/## (.*)/g, '<h2>$1</h2>').replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>').replace(/^- (.*)/gm, '<li>$1</li>') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "format-output",
+      "name": "Format Output",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1300, 300]
+    },
+    {
+      "parameters": {
+        "sendTo": "wendy@flamecentre.com",
+        "subject": "={{ $json.emailSubject }}",
+        "emailType": "html",
+        "message": "={{ $json.briefingHtml }}",
+        "options": {}
+      },
+      "id": "gmail-send",
+      "name": "Send Briefing Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1550, 300],
+      "disabled": true,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail OAuth2"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          { "node": "Mock Calendar Events", "type": "main", "index": 0 },
+          { "node": "Mock Unread Emails", "type": "main", "index": 0 },
+          { "node": "Mock Open Proposals", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Mock Calendar Events": {
+      "main": [
+        [
+          { "node": "Merge All Data", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Mock Unread Emails": {
+      "main": [
+        [
+          { "node": "Merge All Data", "type": "main", "index": 1 }
+        ]
+      ]
+    },
+    "Mock Open Proposals": {
+      "main": [
+        [
+          { "node": "Merge All Data", "type": "main", "index": 2 }
+        ]
+      ]
+    },
+    "Merge All Data": {
+      "main": [
+        [
+          { "node": "Prepare Briefing Data", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Prepare Briefing Data": {
+      "main": [
+        [
+          { "node": "Generate Briefing via Claude", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Generate Briefing via Claude": {
+      "main": [
+        [
+          { "node": "Format Output", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Format Output": {
+      "main": [
+        [
+          { "node": "Send Briefing Email", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    { "name": "flamecentre" },
+    { "name": "morning-briefing" },
+    { "name": "test" }
+  ],
+  "triggerCount": 0,
+  "pinData": {}
+}
