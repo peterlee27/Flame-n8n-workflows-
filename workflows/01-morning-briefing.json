@@ -117,19 +117,19 @@
             {
               "id": "prep-meetings",
               "name": "todaysMeetings",
-              "value": "={{ $('Fetch Today\\'s Events').all().map(e => e.json.summary + ' at ' + e.json.start?.dateTime).join('\\n') }}",
+              "value": "={{ $('Fetch Today\\'s Events').all().map(e => (e.json.summary || e.json.title || e.json.subject || '(No title)') + ' at ' + (e.json.start?.dateTime || e.json.start?.date || e.json.startDate || 'TBD')).join('\\n') }}",
               "type": "string"
             },
             {
               "id": "prep-emails",
               "name": "urgentEmails",
-              "value": "={{ $('Fetch Unread Emails').all().map(e => 'From: ' + e.json.from + ' | Subject: ' + e.json.subject).join('\\n') }}",
+              "value": "={{ $('Fetch Unread Emails').all().map(e => 'From: ' + (e.json.from || e.json.sender || 'Unknown') + ' | Subject: ' + (e.json.subject || '(No subject)')).join('\\n') }}",
               "type": "string"
             },
             {
               "id": "prep-proposals",
               "name": "openProposals",
-              "value": "={{ $('Fetch Open Proposals').all().map(e => e.json.client + ' – ' + e.json.proposal_name + ' ($' + e.json.amount + ')').join('\\n') }}",
+              "value": "={{ $('Fetch Open Proposals').all().map(e => (e.json.client || 'Unknown client') + ' – ' + (e.json.proposal_name || e.json.proposalName || '(Untitled)') + ' ($' + (e.json.amount || '0') + ')').join('\\n') }}",
               "type": "string"
             }
           ]
