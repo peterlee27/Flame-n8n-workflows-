@@ -1,0 +1,1109 @@
+{
+  "name": "Flamecentre – Participant Data Ingestion",
+  "nodes": [
+    {
+      "parameters": {
+        "event": "messageReceived",
+        "output": "fields",
+        "fields": ["body", "subject", "from", "hasAttachments", "receivedDateTime", "bodyPreview"],
+        "options": {
+          "downloadAttachments": true
+        },
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        }
+      },
+      "id": "outlook-trigger",
+      "name": "Outlook — Watch Inbox",
+      "type": "n8n-nodes-base.microsoftOutlookTrigger",
+      "typeVersion": 1,
+      "position": [0, 300],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "",
+          "name": "Microsoft Outlook OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false
+          },
+          "combinator": "or",
+          "conditions": [
+            {
+              "id": "check-subject-participants",
+              "leftValue": "={{ $json.subject }}",
+              "rightValue": "participant",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            },
+            {
+              "id": "check-subject-attendees",
+              "leftValue": "={{ $json.subject }}",
+              "rightValue": "attendee",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            },
+            {
+              "id": "check-subject-pax",
+              "leftValue": "={{ $json.subject }}",
+              "rightValue": "pax list",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            },
+            {
+              "id": "check-subject-namelist",
+              "leftValue": "={{ $json.subject }}",
+              "rightValue": "name list",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-keyword-match",
+      "name": "If — Subject Has Keywords?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [300, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {},
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "check-has-attachment",
+              "leftValue": "={{ $json.hasAttachments }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-has-attachment",
+      "name": "If — Has Attachment?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "operation": "fromFile",
+        "options": {}
+      },
+      "id": "parse-spreadsheet",
+      "name": "Parse Attachment (Excel/CSV)",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "typeVersion": 2,
+      "position": [900, 150]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "set-email-body",
+              "name": "emailBody",
+              "value": "={{ $('Outlook — Watch Inbox').item.json.body?.content || $('Outlook — Watch Inbox').item.json.bodyPreview || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "set-email-subject",
+              "name": "emailSubject",
+              "value": "={{ $('Outlook — Watch Inbox').item.json.subject || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "set-sender-email",
+              "name": "senderEmail",
+              "value": "={{ $('Outlook — Watch Inbox').item.json.from?.emailAddress?.address || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "set-sender-name",
+              "name": "senderName",
+              "value": "={{ $('Outlook — Watch Inbox').item.json.from?.emailAddress?.name || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "set-parsed-rows",
+              "name": "parsedRows",
+              "value": "={{ JSON.stringify($('Parse Attachment (Excel/CSV)').all().map(item => item.json)) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "combine-data-with-attachment",
+      "name": "Combine Body + Parsed Data (Attachment)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1200, 150]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "set-email-body-only",
+              "name": "emailBody",
+              "value": "={{ $json.body?.content || $json.bodyPreview || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "set-email-subject-only",
+              "name": "emailSubject",
+              "value": "={{ $json.subject || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "set-sender-email-only",
+              "name": "senderEmail",
+              "value": "={{ $json.from?.emailAddress?.address || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "set-sender-name-only",
+              "name": "senderName",
+              "value": "={{ $json.from?.emailAddress?.name || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "set-no-attachment",
+              "name": "parsedRows",
+              "value": "[]",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "combine-data-body-only",
+      "name": "Combine Body Only (No Attachment)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1200, 450]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 2000, messages: [{ role: 'user', content: 'You are a data extraction assistant for Flame Centre, a training company in Singapore.\\n\\nYou are receiving an email body and optionally pre-parsed spreadsheet rows from an attachment. Your job: clean and normalize the data, extract participant fields, and extract metadata from the email.\\n\\n--- EMAIL SUBJECT ---\\n' + $json.emailSubject + '\\n\\n--- EMAIL BODY ---\\n' + $json.emailBody + '\\n\\n--- PRE-PARSED ATTACHMENT ROWS (JSON) ---\\n' + $json.parsedRows + '\\n\\n--- INSTRUCTIONS ---\\nIf pre-parsed rows are provided and non-empty, use those as the primary data source. Use the email body for metadata and any missing context.\\nIf no attachment rows, extract participants from the email body directly.\\n\\nOutput a JSON object with two keys:\\n1. \"participants\" - array of participant objects with fields:\\n   - name (full name)\\n   - email\\n   - organisation\\n   - designation\\n   - nric_last4 (last 4 chars of NRIC, e.g. \"567A\" — only if present)\\n   - citizenship (Singaporean / PR / Foreigner — only if present)\\n\\n2. \"meta\" - object with fields:\\n   - sender_name\\n   - sender_email\\n   - workshop_hint (any workshop or course name mentioned)\\n   - date_hint (any date mentioned, in DD Mon YYYY format)\\n   - participant_count (total count if mentioned)\\n\\nIf the data is too messy or unreadable, return:\\n{\"error\": \"EXTRACTION_FAILED\", \"reason\": \"brief explanation\"}\\n\\nReturn ONLY the JSON object. No preamble, no markdown, no explanation.' }] }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "claude-extract",
+      "name": "Claude — Extract Participants",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1500, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Claude's response and check for extraction failure\nconst responseText = $input.first().json.content[0].text;\nlet parsed;\ntry {\n  parsed = JSON.parse(responseText);\n} catch (e) {\n  return [{ json: { error: 'EXTRACTION_FAILED', reason: 'Claude response was not valid JSON: ' + e.message } }];\n}\nreturn [{ json: parsed }];"
+      },
+      "id": "parse-claude-response",
+      "name": "Parse Claude Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1800, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {},
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "check-extraction-failed",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "EXTRACTION_FAILED",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-extraction-failed",
+      "name": "If — Extraction Failed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2100, 300]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "toRecipients": "admin@flamecentre.com",
+        "subject": "=⚠️ Participant List — Manual Extraction Needed",
+        "bodyContent": "=A participant list email was received but could not be automatically processed.\n\nSender: {{ $('Outlook — Watch Inbox').item.json.from?.emailAddress?.address || 'Unknown' }}\nSubject: {{ $('Outlook — Watch Inbox').item.json.subject || '(No subject)' }}\nReason: {{ $json.reason || 'Unknown error' }}\n\nPlease review the original email and process the participant list manually.",
+        "options": {}
+      },
+      "id": "outlook-admin-extraction-failed",
+      "name": "Outlook — Admin Alert (Extraction Failed)",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [2400, 500],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "",
+          "name": "Microsoft Outlook OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "sheetId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "options": {}
+      },
+      "id": "read-master-dashboard",
+      "name": "Google Sheets — Read Master Dashboard",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [2400, 200],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Match logic: score the incoming participant list against active workshops\nconst extracted = $('Parse Claude Response').first().json;\nconst meta = extracted.meta || {};\nconst senderEmail = meta.sender_email || $('Outlook — Watch Inbox').first().json.from?.emailAddress?.address || '';\nconst senderDomain = senderEmail.split('@')[1] || '';\nconst accountHint = (meta.workshop_hint || '').toLowerCase();\nconst dateHint = meta.date_hint || '';\n\nconst dashboardRows = $('Google Sheets — Read Master Dashboard').all().map(item => item.json);\n\nlet bestMatch = null;\nlet bestScore = 0;\n\nfor (const row of dashboardRows) {\n  if (!row.workshop_id || row.status === 'Archived') continue;\n  \n  let score = 0;\n  \n  // Sender domain match (+3)\n  const clientEmail = (row.client_contact_email || '').toLowerCase();\n  const clientDomain = clientEmail.split('@')[1] || '';\n  if (senderDomain && clientDomain && senderDomain.toLowerCase() === clientDomain) {\n    score += 3;\n  }\n  \n  // Account name fuzzy match (+2)\n  const accountName = (row.account_name || '').toLowerCase();\n  if (accountHint && accountName && (accountName.includes(accountHint) || accountHint.includes(accountName))) {\n    score += 2;\n  }\n  \n  // Date match (+2)\n  if (dateHint && row.start_date) {\n    const rowDate = new Date(row.start_date).toDateString();\n    const hintDate = new Date(dateHint).toDateString();\n    if (rowDate === hintDate) {\n      score += 2;\n    }\n  }\n  \n  // Workshop title keyword match (+1)\n  const workshopTitle = (row.workshop_title || '').toLowerCase();\n  if (accountHint && workshopTitle) {\n    const keywords = accountHint.split(/\\s+/);\n    if (keywords.some(kw => kw.length > 3 && workshopTitle.includes(kw))) {\n      score += 1;\n    }\n  }\n  \n  if (score > bestScore) {\n    bestScore = score;\n    bestMatch = row;\n  }\n}\n\nlet confidence;\nif (bestScore >= 4) {\n  confidence = 'HIGH_CONFIDENCE';\n} else if (bestScore >= 1) {\n  confidence = 'LOW_CONFIDENCE';\n} else {\n  confidence = 'NO_MATCH';\n}\n\nreturn [{\n  json: {\n    confidence,\n    score: bestScore,\n    matchedWorkshop: bestMatch,\n    participants: extracted.participants || [],\n    meta\n  }\n}];"
+      },
+      "id": "match-logic",
+      "name": "Function — Match to Workshop",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2700, 200]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputIndex": 0,
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.confidence }}",
+                    "rightValue": "HIGH_CONFIDENCE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "outputIndex": 1,
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.confidence }}",
+                    "rightValue": "LOW_CONFIDENCE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "outputIndex": 2,
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.confidence }}",
+                    "rightValue": "NO_MATCH",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "switch-match-confidence",
+      "name": "Switch — Match Confidence",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [3000, 200]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "toRecipients": "admin@flamecentre.com",
+        "subject": "=⚠️ Participant list received — workshop not identified",
+        "bodyContent": "=A participant list was received from {{ $json.meta.sender_email || 'unknown sender' }} at {{ $now.format('yyyy-MM-dd HH:mm') }}.\n\nWe could not automatically match this to a workshop.\n\nBest guess from email:\n- Account: {{ $json.meta.workshop_hint || 'Not detected' }}\n- Date mentioned: {{ $json.meta.date_hint || 'Not detected' }}\n- Participants found: {{ $json.participants.length || 0 }}\n\nPlease reply to this email with the Workshop ID (format: FC-2026-XXX) to continue processing.",
+        "options": {}
+      },
+      "id": "outlook-no-match-alert",
+      "name": "Outlook — Admin No-Match Alert",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [3300, 550],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "",
+          "name": "Microsoft Outlook OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "values": [
+            {
+              "column": "workshop_id",
+              "value": "PENDING"
+            },
+            {
+              "column": "account_name",
+              "value": "={{ $json.meta.workshop_hint || 'Unknown — ' + ($json.meta.sender_email || 'no sender') }}"
+            },
+            {
+              "column": "status",
+              "value": "⚠️ PENDING MATCH"
+            },
+            {
+              "column": "flag",
+              "value": "=Unmatched participant list — manual review needed ({{ $now.format('yyyy-MM-dd HH:mm') }})"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "write-pending-row",
+      "name": "Google Sheets — Write Pending Row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [3300, 700],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "options": {
+          "timeout": 24,
+          "timeoutUnit": "hours"
+        }
+      },
+      "id": "wait-no-match-reply",
+      "name": "Wait — 24h for Admin Reply (No Match)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [3600, 550]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {},
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "check-timed-out",
+              "leftValue": "={{ $json.timedOut }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-no-match-timed-out",
+      "name": "If — No Match Timed Out?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [3900, 550]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "toRecipients": "clientpartnership@flamecentre.com",
+        "subject": "=🚨 ESCALATION: Unmatched participant list — no admin response in 24h",
+        "bodyContent": "=An unmatched participant list from {{ $('Parse Claude Response').first().json.meta?.sender_email || 'unknown' }} has been pending for 24 hours with no admin response.\n\nPlease review the Master Dashboard for the PENDING MATCH row and take action.",
+        "options": {}
+      },
+      "id": "outlook-escalate-cp",
+      "name": "Outlook — Escalate to Client Partnership",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [4200, 700],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "",
+          "name": "Microsoft Outlook OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "toRecipients": "admin@flamecentre.com",
+        "subject": "=⚠️ Low confidence match — please confirm workshop for participant list",
+        "bodyContent": "=A participant list was received from {{ $json.meta.sender_email || 'unknown sender' }}.\n\nBest guess match: {{ $json.matchedWorkshop?.workshop_title || 'Unknown' }} ({{ $json.matchedWorkshop?.workshop_id || 'N/A' }})\nConfidence score: {{ $json.score }}/8\n\nAccount: {{ $json.matchedWorkshop?.account_name || 'N/A' }}\nDate: {{ $json.matchedWorkshop?.start_date || 'N/A' }}\nParticipants found: {{ $json.participants.length || 0 }}\n\nPlease reply with the correct Workshop ID (format: FC-2026-XXX) to confirm, or reply with the correct ID if this guess is wrong.",
+        "options": {}
+      },
+      "id": "outlook-low-confidence-alert",
+      "name": "Outlook — Admin Low-Confidence Alert",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [3300, 200],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "",
+          "name": "Microsoft Outlook OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "options": {
+          "timeout": 24,
+          "timeoutUnit": "hours"
+        }
+      },
+      "id": "wait-low-confidence-reply",
+      "name": "Wait — Admin Reply (Low Confidence)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [3600, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Read the matched workshop row details\nconst matchData = $('Function — Match to Workshop').first().json;\nconst workshop = matchData.matchedWorkshop;\n\nif (!workshop) {\n  throw new Error('No matched workshop found');\n}\n\nreturn [{\n  json: {\n    workshop_id: workshop.workshop_id,\n    workshop_title: workshop.workshop_title,\n    account_name: workshop.account_name,\n    start_date: workshop.start_date,\n    funding_type: workshop.funding_type || 'Non-Funded',\n    participant_sheet_link: workshop.participant_sheet_link || '',\n    participant_list_received: workshop.participant_list_received || 'No',\n    skilleto_done: workshop.skilleto_done || 'NA',\n    tpg_done: workshop.tpg_done || 'NA',\n    participants: matchData.participants,\n    meta: matchData.meta\n  }\n}];"
+      },
+      "id": "read-matched-row",
+      "name": "Read Matched Workshop Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3900, -50]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {},
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "check-duplicate",
+              "leftValue": "={{ $json.participant_list_received }}",
+              "rightValue": "Yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-duplicate",
+      "name": "If — Duplicate Submission?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [4200, -50]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "toRecipients": "admin@flamecentre.com",
+        "subject": "=⚠️ Duplicate participant list for {{ $json.workshop_title }} ({{ $json.workshop_id }})",
+        "bodyContent": "=A participant list was already received for {{ $json.workshop_title }} ({{ $json.workshop_id }}).\n\nA new list with {{ $json.participants.length }} participants was just received from {{ $json.meta.sender_email || 'unknown' }}.\n\nTo overwrite the existing data, reply YES to this email.\nTo ignore, no action is needed (this will time out in 24 hours).",
+        "options": {}
+      },
+      "id": "outlook-duplicate-alert",
+      "name": "Outlook — Admin Duplicate Alert",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [4500, 100],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "",
+          "name": "Microsoft Outlook OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "options": {
+          "timeout": 24,
+          "timeoutUnit": "hours"
+        }
+      },
+      "id": "wait-duplicate-confirm",
+      "name": "Wait — Duplicate Overwrite Confirm",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [4800, 100]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputIndex": 0,
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.funding_type }}",
+                    "rightValue": "Non-Funded",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "outputIndex": 1,
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.funding_type }}",
+                    "rightValue": "SSG",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "outputIndex": 2,
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.funding_type }}",
+                    "rightValue": "IBF",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "switch-funding-type",
+      "name": "Switch — Funding Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [4500, -200]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "={{ $json.participant_sheet_link }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData"
+        },
+        "options": {}
+      },
+      "id": "write-participants",
+      "name": "Google Sheets — Write Participants",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [4800, -200],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate Skilleto-ready CSV data for admin upload\nconst data = $('Read Matched Workshop Row').first().json;\nconst participants = data.participants || [];\n\n// Skilleto CSV headers\nconst headers = ['Name', 'Email', 'Organisation', 'Designation', 'NRIC (Last 4)', 'Citizenship'];\nconst rows = participants.map(p => [\n  p.name || '',\n  p.email || '',\n  p.organisation || '',\n  p.designation || '',\n  p.nric_last4 || '',\n  p.citizenship || ''\n]);\n\nconst csvContent = [headers.join(','), ...rows.map(r => r.map(cell => '\"' + (cell || '').replace(/\"/g, '\"\"') + '\"').join(','))].join('\\n');\n\nreturn [{\n  json: {\n    workshopId: data.workshop_id,\n    workshopTitle: data.workshop_title,\n    participantCount: participants.length,\n    csvContent\n  },\n  binary: {\n    data: {\n      data: Buffer.from(csvContent).toString('base64'),\n      mimeType: 'text/csv',\n      fileName: data.workshop_id + '_Skilleto_Upload.csv'\n    }\n  }\n}];"
+      },
+      "id": "generate-skilleto-csv",
+      "name": "Function — Generate Skilleto CSV",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5100, -300]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "toRecipients": "admin@flamecentre.com",
+        "subject": "=📋 Skilleto Upload Ready — {{ $json.workshopTitle }} ({{ $json.workshopId }})",
+        "bodyContent": "=The Skilleto-ready CSV for {{ $json.workshopTitle }} ({{ $json.workshopId }}) is attached.\n\nParticipants: {{ $json.participantCount }}\n\nPlease download the attached CSV and upload it to Skilleto.\n\nOnce uploaded, update Column M (Skilleto Done) in the Master Dashboard to \"Yes\".",
+        "options": {
+          "attachments": "data"
+        }
+      },
+      "id": "outlook-skilleto-csv",
+      "name": "Outlook — Email Skilleto CSV to Admin",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [5400, -300],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "",
+          "name": "Microsoft Outlook OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate TPG-ready CSV data for admin upload (IBF workshops only)\nconst data = $('Read Matched Workshop Row').first().json;\nconst participants = data.participants || [];\n\n// TPG CSV headers\nconst headers = ['Name', 'Email', 'Organisation', 'Designation', 'NRIC (Last 4)', 'Citizenship'];\nconst rows = participants.map(p => [\n  p.name || '',\n  p.email || '',\n  p.organisation || '',\n  p.designation || '',\n  p.nric_last4 || '',\n  p.citizenship || ''\n]);\n\nconst csvContent = [headers.join(','), ...rows.map(r => r.map(cell => '\"' + (cell || '').replace(/\"/g, '\"\"') + '\"').join(','))].join('\\n');\n\nreturn [{\n  json: {\n    workshopId: data.workshop_id,\n    workshopTitle: data.workshop_title,\n    participantCount: participants.length,\n    csvContent\n  },\n  binary: {\n    data: {\n      data: Buffer.from(csvContent).toString('base64'),\n      mimeType: 'text/csv',\n      fileName: data.workshop_id + '_TPG_Upload.csv'\n    }\n  }\n}];"
+      },
+      "id": "generate-tpg-csv",
+      "name": "Function — Generate TPG CSV",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5100, -100]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "toRecipients": "admin@flamecentre.com",
+        "subject": "=📋 TPG Upload Ready — {{ $json.workshopTitle }} ({{ $json.workshopId }})",
+        "bodyContent": "=The TPG-ready CSV for {{ $json.workshopTitle }} ({{ $json.workshopId }}) is attached.\n\nParticipants: {{ $json.participantCount }}\n\nPlease download the attached CSV and upload it to TPG.\n\nOnce uploaded, update Column N (TPG Done) in the Master Dashboard to \"Yes\".",
+        "options": {
+          "attachments": "data"
+        }
+      },
+      "id": "outlook-tpg-csv",
+      "name": "Outlook — Email TPG CSV to Admin",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [5400, -100],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "",
+          "name": "Microsoft Outlook OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "sheetId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "workshop_id",
+              "lookupValue": "={{ $('Read Matched Workshop Row').first().json.workshop_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "values": [
+            {
+              "column": "participant_count",
+              "value": "={{ $('Read Matched Workshop Row').first().json.participants.length }}"
+            },
+            {
+              "column": "participant_list_received",
+              "value": "Yes"
+            },
+            {
+              "column": "flag",
+              "value": "={{ '✅ List received ' + $now.format('yyyy-MM-dd HH:mm') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "update-master-dashboard",
+      "name": "Google Sheets — Update Master Dashboard",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [5700, -200],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "toRecipients": "={{ $('Read Matched Workshop Row').first().json.meta.sender_email || '' }}",
+        "subject": "=Thank you — Participant list received for {{ $('Read Matched Workshop Row').first().json.workshop_title }}",
+        "bodyContent": "=Dear {{ $('Read Matched Workshop Row').first().json.meta.sender_name || 'Client' }},\n\nThank you — we've received the participant list for {{ $('Read Matched Workshop Row').first().json.workshop_title }} on {{ $('Read Matched Workshop Row').first().json.start_date || 'the scheduled date' }}.\n\n{{ $('Read Matched Workshop Row').first().json.participants.length }} participants confirmed.\n\nIf you need to make any changes, please reply to this email.\n\nBest regards,\nFlame Centre",
+        "options": {
+          "senderName": "Flame Centre"
+        }
+      },
+      "id": "outlook-client-confirmation",
+      "name": "Outlook — Client Confirmation",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [6000, -350],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "",
+          "name": "Microsoft Outlook OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "toRecipients": "admin@flamecentre.com",
+        "subject": "=✅ Participant list logged — {{ $('Read Matched Workshop Row').first().json.workshop_title }} ({{ $('Read Matched Workshop Row').first().json.workshop_id }})",
+        "bodyContent": "=Participant list received and processed for {{ $('Read Matched Workshop Row').first().json.workshop_title }} ({{ $('Read Matched Workshop Row').first().json.workshop_id }}).\n\nParticipants logged: {{ $('Read Matched Workshop Row').first().json.participants.length }}\nFunding type: {{ $('Read Matched Workshop Row').first().json.funding_type }}\n{{ $('Read Matched Workshop Row').first().json.funding_type === 'SSG' ? 'Skilleto CSV generated and emailed to you.' : '' }}{{ $('Read Matched Workshop Row').first().json.funding_type === 'IBF' ? 'Skilleto + TPG CSVs generated and emailed to you.' : '' }}\n\nMaster Dashboard updated — Column J set to Yes.",
+        "options": {}
+      },
+      "id": "outlook-admin-notification",
+      "name": "Outlook — Admin Notification",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [6000, -100],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "",
+          "name": "Microsoft Outlook OAuth2"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Outlook — Watch Inbox": {
+      "main": [
+        [
+          { "node": "If — Subject Has Keywords?", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "If — Subject Has Keywords?": {
+      "main": [
+        [
+          { "node": "If — Has Attachment?", "type": "main", "index": 0 }
+        ],
+        []
+      ]
+    },
+    "If — Has Attachment?": {
+      "main": [
+        [
+          { "node": "Parse Attachment (Excel/CSV)", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Combine Body Only (No Attachment)", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Parse Attachment (Excel/CSV)": {
+      "main": [
+        [
+          { "node": "Combine Body + Parsed Data (Attachment)", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Combine Body + Parsed Data (Attachment)": {
+      "main": [
+        [
+          { "node": "Claude — Extract Participants", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Combine Body Only (No Attachment)": {
+      "main": [
+        [
+          { "node": "Claude — Extract Participants", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Claude — Extract Participants": {
+      "main": [
+        [
+          { "node": "Parse Claude Response", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Parse Claude Response": {
+      "main": [
+        [
+          { "node": "If — Extraction Failed?", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "If — Extraction Failed?": {
+      "main": [
+        [
+          { "node": "Outlook — Admin Alert (Extraction Failed)", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Google Sheets — Read Master Dashboard", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Google Sheets — Read Master Dashboard": {
+      "main": [
+        [
+          { "node": "Function — Match to Workshop", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Function — Match to Workshop": {
+      "main": [
+        [
+          { "node": "Switch — Match Confidence", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Switch — Match Confidence": {
+      "main": [
+        [
+          { "node": "Read Matched Workshop Row", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Outlook — Admin Low-Confidence Alert", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Outlook — Admin No-Match Alert", "type": "main", "index": 0 },
+          { "node": "Google Sheets — Write Pending Row", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Outlook — Admin No-Match Alert": {
+      "main": [
+        [
+          { "node": "Wait — 24h for Admin Reply (No Match)", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Wait — 24h for Admin Reply (No Match)": {
+      "main": [
+        [
+          { "node": "If — No Match Timed Out?", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "If — No Match Timed Out?": {
+      "main": [
+        [
+          { "node": "Outlook — Escalate to Client Partnership", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Read Matched Workshop Row", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Outlook — Admin Low-Confidence Alert": {
+      "main": [
+        [
+          { "node": "Wait — Admin Reply (Low Confidence)", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Wait — Admin Reply (Low Confidence)": {
+      "main": [
+        [
+          { "node": "Read Matched Workshop Row", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Read Matched Workshop Row": {
+      "main": [
+        [
+          { "node": "If — Duplicate Submission?", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "If — Duplicate Submission?": {
+      "main": [
+        [
+          { "node": "Outlook — Admin Duplicate Alert", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Switch — Funding Type", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Outlook — Admin Duplicate Alert": {
+      "main": [
+        [
+          { "node": "Wait — Duplicate Overwrite Confirm", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Wait — Duplicate Overwrite Confirm": {
+      "main": [
+        [
+          { "node": "Switch — Funding Type", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Switch — Funding Type": {
+      "main": [
+        [
+          { "node": "Google Sheets — Write Participants", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Google Sheets — Write Participants", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Google Sheets — Write Participants", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Google Sheets — Write Participants": {
+      "main": [
+        [
+          { "node": "Google Sheets — Update Master Dashboard", "type": "main", "index": 0 },
+          { "node": "Function — Generate Skilleto CSV", "type": "main", "index": 0 },
+          { "node": "Function — Generate TPG CSV", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Function — Generate Skilleto CSV": {
+      "main": [
+        [
+          { "node": "Outlook — Email Skilleto CSV to Admin", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Function — Generate TPG CSV": {
+      "main": [
+        [
+          { "node": "Outlook — Email TPG CSV to Admin", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Google Sheets — Update Master Dashboard": {
+      "main": [
+        [
+          { "node": "Outlook — Client Confirmation", "type": "main", "index": 0 },
+          { "node": "Outlook — Admin Notification", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    { "name": "flamecentre" },
+    { "name": "participant-ingestion" },
+    { "name": "email-trigger" }
+  ],
+  "triggerCount": 1,
+  "pinData": {}
+}

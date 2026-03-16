@@ -12,12 +12,14 @@ Comprehensive n8n workflow suite for Flamecentre business automation.
 | 04 | Lead Routing & Outreach | Sector-based outreach (public/private) with auto follow-up | Webhook |
 | 05 | Book Download Nurture | 3-email sequence for Smarter book downloads, sector-tailored | Webhook |
 | 06 | Research Insight Extractor | Extract insight cards & digest from interview transcripts | Manual |
+| 07 | Participant Data Ingestion | Auto-extract participant lists from emails, match to workshops, write to sheets, trigger Skilleto/TPG | Outlook email |
 
 ## Setup
 
 ### Prerequisites
 - n8n instance (self-hosted or cloud)
 - Google Workspace OAuth2 credentials (Calendar, Gmail, Sheets)
+- Microsoft Outlook OAuth2 credentials (Workflow 07)
 - Anthropic API key
 
 ### Import Instructions
@@ -112,6 +114,34 @@ Status progression: `new` → `nurtured` (Workflow 05)
 | theme | quote | workshopApplication | interviewee | interviewDate |
 |-------|-------|-------------------|-------------|--------------|
 | Cognitive Sloth | "People default to AI answers..." | Use as opening exercise in Thinking with AI workshop | Dr. Jane Doe | 2026-03-10 |
+
+### Microsoft Outlook OAuth2 Setup (Workflow 07)
+
+1. In n8n, go to **Credentials → New → Microsoft Outlook OAuth2 API**
+2. Register an app in Azure AD with the following API permissions:
+   - `Mail.Read`, `Mail.ReadWrite`, `Mail.Send`, `offline_access`, `User.Read`
+3. Set the redirect URI to your n8n OAuth callback URL
+4. Enter the Client ID and Client Secret in n8n
+5. Connect and authorize
+
+### Master Dashboard Setup (Workflow 07)
+
+The Master Dashboard Google Sheet must have these columns (see spec for full reference):
+
+| Column | Letter | Description |
+|--------|--------|-------------|
+| Workshop ID | A | Primary key (FC-2026-XXX) |
+| Account Name | B | Client company name |
+| Workshop Title | C | Workshop name |
+| Start Date | D | Workshop start date |
+| Funding Type | G | IBF / SSG / Non-Funded |
+| Status | H | Confirmed / In Prep / Ready / Delivered / Archived |
+| # Participants | I | Updated by workflow |
+| Participant List Received | J | Yes/No — set by workflow |
+| Skilleto Done | M | Yes/No/NA/Pending Upload |
+| TPG Done | N | Yes/No/NA/Pending Upload |
+| n8n Flag | Q | Status flags written by workflow |
+| Participant Sheet | S | URL link to the workshop's participant file |
 
 ### Environment Variables
 
